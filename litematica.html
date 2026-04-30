@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Litematica 材料清單 (含圖示版)</title>
+    <title>Litematica 材料清單</title>
     <style>
         :root {
             --bg-color: #0e0e11;
@@ -31,7 +31,6 @@
 
         .container { width: 100%; max-width: 1000px; }
 
-        /* 頂部資訊卡 */
         .header-card {
             background-color: var(--card-bg);
             border-radius: 16px;
@@ -75,7 +74,6 @@
             outline: none;
         }
 
-        /* 列表樣式 */
         .list-card {
             background-color: var(--card-bg);
             border-radius: 16px;
@@ -103,15 +101,13 @@
             align-items: center;
             transition: 0.15s;
         }
-        .row:hover { background-color: var(--row-hover); transform: translateX(4px); }
 
         .col-item { display: flex; align-items: center; gap: 14px; font-weight: 600; }
         
-        /* 物品圖示樣式 */
         .block-icon {
             width: 34px;
             height: 34px;
-            image-rendering: pixelated; /* 讓麥塊像素圖保持清晰不模糊 */
+            image-rendering: pixelated; 
             object-fit: contain;
             filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
         }
@@ -129,6 +125,42 @@
             font-size: 12px;
             font-weight: 700;
         }
+/* 調整 Grid 比例，為眼睛留位置 */
+.list-header, .row {
+    display: grid;
+    grid-template-columns: 50px 2.5fr 1fr 1.5fr 2fr; /* 固定第一欄寬度 */
+    align-items: center;
+}
+/* 眼睛按鈕樣式 */
+.eye-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    color: var(--text-muted);
+    transition: 0.2s;
+}
+
+.eye-btn:hover {
+    color: var(--accent-blue);
+    transform: scale(1.1);
+}
+
+/* --- 核心修改：劃掉的視覺效果 --- */
+.row.completed {
+    background-color: #121214; /* 變暗：使用比背景稍淺一點的顏色 */
+    opacity: 0.25;             /* 變透：讓整行變得很淡 */
+    filter: grayscale(1);      /* 去色：讓彩色圖示變黑白 */
+    transform: scale(0.98);    /* 微縮：視覺上產生凹陷感 */
+    pointer-events: auto;      /* 確保還能點擊取消 */
+}
+
+/* 確保文字在完成時沒有刪除線 */
+.row.completed .col-item, 
+.row.completed .col-total,
+.row.completed .box-pill {
+    text-decoration: none;
+}
 
         #fileInput { display: none; }
         .empty-state { text-align: center; color: var(--text-muted); padding: 60px; font-size: 18px; }
@@ -152,6 +184,7 @@
 
         <div class="list-card" id="listCard" style="display:none;">
             <div class="list-header">
+                <div style="text-align:center; opacity: 0.5;">#</div>
                 <div>Item</div>
                 <div>Total</div>
                 <div>Stacks (64)</div>
@@ -166,6 +199,7 @@
         import * as NBT from "https://cdn.jsdelivr.net/npm/nbtify@2.1.0/+esm";
 
         let currentData = [];
+        let completedItems = new Set();
 
         document.getElementById('fileInput').addEventListener('change', async function(e) {
             const file = e.target.files[0];
@@ -265,31 +299,59 @@
         }
 
         // 渲染列表
-        function renderList(dataArray) {
-            const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '';
+// 修改：渲染列表函式
+function renderList(dataArray) {
+    const resultsDiv = document.getElementById('results');
+    resultsDiv.innerHTML = '';
 
-            dataArray.forEach(item => {
-                const row = document.createElement('div');
-                row.className = 'row';
-                
-                // 圖示來源優化：先找 blocks 目錄，失敗再找 items 目錄
-                const blockIconUrl = `https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/1.19.2/blocks/${item.name}.png`;
-                const itemIconUrl = `https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/1.19.2/items/${item.name}.png`;
+    dataArray.forEach(item => {
+        const row = document.createElement('div');
+        
+        // 檢查此物品是否在已完成清單中，如果是則加上 completed 類別
+        const isCompleted = completedItems.has(item.name);
+        row.className = `row ${isCompleted ? 'completed' : ''}`;
+        
+        const blockIconUrl = `https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/1.19.2/blocks/${item.name}.png`;
+        const itemIconUrl = `https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/1.19.2/items/${item.name}.png`;
 
-                row.innerHTML = `
-                    <div class="col-item">
-                        <img src="${blockIconUrl}" class="block-icon" 
-                             onerror="this.onerror=null; this.src='${itemIconUrl}'; this.oncallback=function(){this.style.display='none'};">
-                        ${formatItemName(item.name)}
-                    </div>
-                    <div class="col-total">${item.count.toLocaleString()}</div>
-                    <div class="col-stacks">${formatStacks(item.count)}</div>
-                    <div class="col-shulkers">${formatShulkers(item.count)}</div>
-                `;
-                resultsDiv.appendChild(row);
-            });
-        }
+        row.innerHTML = `
+            <button class="eye-btn" data-name="${item.name}" title="標記完成">
+                ${isCompleted ? '✔️' : '👁️'}
+            </button>
+            <div class="col-item">
+                <img src="${blockIconUrl}" class="block-icon" 
+                     onerror="this.onerror=null; this.src='${itemIconUrl}';">
+                ${formatItemName(item.name)}
+            </div>
+            <div class="col-total">${item.count.toLocaleString()}</div>
+            <div class="col-stacks">${formatStacks(item.count)}</div>
+            <div class="col-shulkers">${formatShulkers(item.count)}</div>
+        `;
+        resultsDiv.appendChild(row);
+    });
+}
+
+// 修改：事件委託處理點擊
+document.getElementById('results').addEventListener('click', function(e) {
+    const btn = e.target.closest('.eye-btn');
+    if (!btn) return;
+    
+    const row = btn.closest('.row');
+    const itemName = btn.getAttribute('data-name');
+    
+    // 切換狀態
+    if (row.classList.contains('completed')) {
+        // 取消完成
+        row.classList.remove('completed');
+        btn.innerText = '👁️';
+        completedItems.delete(itemName); // 從記錄中移除
+    } else {
+        // 標記完成
+        row.classList.add('completed');
+        btn.innerText = '✔️';
+        completedItems.add(itemName);    // 加入記錄
+    }
+});
 
         function formatItemName(name) {
             return name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
