@@ -3,66 +3,319 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Litematica 解析器</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
-    <script src="https://unpkg.com/nbt@2.2.0/nbt.js"></script>
+    <title>Litematica 材料清單 (含圖示版)</title>
     <style>
-        body { font-family: sans-serif; background: #1e1e2e; color: #f8f8f2; padding: 20px; text-align: center; }
-        .container { max-width: 600px; margin: auto; background: #282a36; padding: 30px; border-radius: 15px; }
-        .upload-area { border: 2px dashed #6272a4; padding: 40px; cursor: pointer; margin-bottom: 20px; }
-        .block-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
-        .block-item { background: #44475a; padding: 10px; border-radius: 5px; font-size: 14px; }
-        .back-btn { display: inline-block; margin-bottom: 20px; color: #bd93f9; text-decoration: none; }
+        :root {
+            --bg-color: #0e0e11;
+            --card-bg: #1a1b1e;
+            --row-bg: #232428;
+            --row-hover: #2a2b30;
+            --text-main: #ffffff;
+            --text-muted: #8b8d98;
+            --accent-blue: #2563eb;
+            --pill-bg: #3b2845;
+            --pill-text: #d4a5ff;
+            --border-color: #313238;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container { width: 100%; max-width: 1000px; }
+
+        /* 頂部資訊卡 */
+        .header-card {
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            padding: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            border: 1px solid var(--border-color);
+        }
+
+        .project-info { display: flex; align-items: center; gap: 16px; }
+
+        .project-icon {
+            background-color: #1e3a8a;
+            color: #60a5fa;
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            transition: 0.2s;
+            border: none;
+        }
+        .project-icon:hover { transform: scale(1.05); background-color: #2563eb; }
+
+        .project-details h1 { margin: 0 0 4px 0; font-size: 22px; font-weight: 600; }
+        .project-details p { margin: 0; font-size: 13px; color: var(--text-muted); }
+
+        .search-bar {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 10px 16px;
+            border-radius: 8px;
+            width: 220px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        /* 列表樣式 */
+        .list-card {
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--border-color);
+        }
+
+        .list-header {
+            display: grid;
+            grid-template-columns: 2.5fr 1fr 1.5fr 2fr;
+            padding: 0 16px 12px 16px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 2.5fr 1fr 1.5fr 2fr;
+            background-color: var(--row-bg);
+            margin-bottom: 8px;
+            border-radius: 12px;
+            padding: 14px 16px;
+            align-items: center;
+            transition: 0.15s;
+        }
+        .row:hover { background-color: var(--row-hover); transform: translateX(4px); }
+
+        .col-item { display: flex; align-items: center; gap: 14px; font-weight: 600; }
+        
+        /* 物品圖示樣式 */
+        .block-icon {
+            width: 34px;
+            height: 34px;
+            image-rendering: pixelated; /* 讓麥塊像素圖保持清晰不模糊 */
+            object-fit: contain;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+        }
+
+        .col-total { font-size: 16px; font-weight: 700; }
+        .col-stacks, .col-shulkers { font-size: 14px; }
+        
+        .dim { color: var(--text-muted); font-size: 12px; }
+        .highlight { font-weight: 600; color: var(--text-main); }
+        .box-pill {
+            background-color: var(--pill-bg);
+            color: var(--pill-text);
+            padding: 4px 10px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        #fileInput { display: none; }
+        .empty-state { text-align: center; color: var(--text-muted); padding: 60px; font-size: 18px; }
     </style>
 </head>
 <body>
+
     <div class="container">
-        <a href="index.html" class="back-btn">← 回到工具箱</a>
-        <h1>⛏️ Litematica 解析器</h1>
-        <div class="upload-area" onclick="document.getElementById('fileInput').click()">
-            點擊上傳 .litematic 檔案
-            <input type="file" id="fileInput" accept=".litematic" style="display:none">
+        <div class="header-card">
+            <div class="project-info">
+                <button class="project-icon" onclick="document.getElementById('fileInput').click()">📦</button>
+                <div class="project-details">
+                    <h1 id="projectName">材料清單解析器</h1>
+                    <p id="projectMeta">請上傳 .litematic 檔案以計算所需材料</p>
+                </div>
+            </div>
+            <input type="text" id="searchInput" class="search-bar" placeholder="搜尋物品..." style="display:none;">
         </div>
-        <div id="status">等待檔案中...</div>
-        <div id="results" class="block-list"></div>
+
+        <input type="file" id="fileInput" accept=".litematic">
+
+        <div class="list-card" id="listCard" style="display:none;">
+            <div class="list-header">
+                <div>Item</div>
+                <div>Total</div>
+                <div>Stacks (64)</div>
+                <div>Shulkers</div>
+            </div>
+            <div id="results"></div>
+        </div>
+        <div id="status" class="empty-state">尚未讀取檔案</div>
     </div>
 
-    <script>
+    <script type="module">
+        import * as NBT from "https://cdn.jsdelivr.net/npm/nbtify@2.1.0/+esm";
+
+        let currentData = [];
+
         document.getElementById('fileInput').addEventListener('change', async function(e) {
             const file = e.target.files[0];
             if (!file) return;
-            document.getElementById('status').innerText = "處理中...";
+            
+            const statusDiv = document.getElementById('status');
+            const listCard = document.getElementById('listCard');
+            const searchInput = document.getElementById('searchInput');
+            
+            statusDiv.innerText = "正在計算方塊與載入圖示...";
+            listCard.style.display = "none";
+            
             try {
                 const arrayBuffer = await file.arrayBuffer();
-                const unzipped = pako.inflate(new Uint8Array(arrayBuffer));
-                nbt.parse(unzipped, function(error, data) {
-                    if (error) throw error;
-                    displayBlocks(data.value);
-                });
+                const parsed = await NBT.read(new Uint8Array(arrayBuffer));
+                const data = parsed.data; 
+
+                // 更新標題資訊
+                const metadata = data.Metadata || {};
+                document.getElementById('projectName').innerText = metadata.Name || file.name.replace('.litematic', '');
+                if (metadata.EnclosingSize) {
+                    const s = metadata.EnclosingSize;
+                    document.getElementById('projectMeta').innerText = `尺寸: ${s.x} × ${s.y} × ${s.z}`;
+                }
+
+                const itemCounts = calculateBlockCounts(data);
+                
+                currentData = Object.entries(itemCounts)
+                    .map(([name, count]) => ({ name, count }))
+                    .sort((a, b) => b.count - a.count);
+
+                statusDiv.style.display = "none";
+                listCard.style.display = "block";
+                searchInput.style.display = "block";
+                
+                renderList(currentData);
+
             } catch (err) {
-                document.getElementById('status').innerText = "解析失敗。";
+                console.error(err);
+                statusDiv.innerText = "解析失敗：" + err.message;
             }
         });
 
-        function displayBlocks(nbtData) {
+        // 搜尋功能
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            const term = e.target.value.toLowerCase();
+            const filtered = currentData.filter(item => 
+                item.name.replace(/_/g, ' ').toLowerCase().includes(term)
+            );
+            renderList(filtered);
+        });
+
+        // 解析 Litematica 方塊數量
+        function calculateBlockCounts(data) {
+            let counts = {};
+            if (!data.Regions) return counts;
+
+            for (const regionName in data.Regions) {
+                const region = data.Regions[regionName];
+                const palette = region.BlockStatePalette;
+                const blockStates = region.BlockStates;
+                const size = region.Size;
+
+                if (!palette || !size) continue;
+                
+                const volume = Math.abs(size.x * size.y * size.z);
+                let localCounts = new Array(palette.length).fill(0);
+
+                if (!blockStates || blockStates.length === 0) {
+                    localCounts[0] = volume;
+                } else {
+                    const bitsPerBlock = Math.max(4, Math.ceil(Math.log2(palette.length)));
+                    const blocksPerLong = Math.floor(64 / bitsPerBlock);
+                    const mask = (1n << BigInt(bitsPerBlock)) - 1n;
+                    
+                    let blockIndex = 0;
+                    for (let i = 0; i < blockStates.length; i++) {
+                        let longVal = BigInt(blockStates[i]);
+                        for (let j = 0; j < blocksPerLong; j++) {
+                            if (blockIndex >= volume) break;
+                            let paletteIndex = Number((longVal >> BigInt(j * bitsPerBlock)) & mask);
+                            if (paletteIndex >= 0 && paletteIndex < palette.length) {
+                                localCounts[paletteIndex]++;
+                            }
+                            blockIndex++;
+                        }
+                    }
+                }
+
+                for (let i = 0; i < palette.length; i++) {
+                    const blockName = palette[i].Name.replace('minecraft:', '');
+                    if (blockName.includes('air')) continue; 
+                    counts[blockName] = (counts[blockName] || 0) + localCounts[i];
+                }
+            }
+            return counts;
+        }
+
+        // 渲染列表
+        function renderList(dataArray) {
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = '';
-            const uniqueBlocks = new Set();
-            const regions = nbtData.Regions.value;
-            for (const name in regions) {
-                const palette = regions[name].value.BlockStatePalette.value;
-                palette.forEach(b => {
-                    const blockName = b.value.Name.value;
-                    if (!blockName.includes('air')) uniqueBlocks.add(blockName.replace('minecraft:', ''));
-                });
-            }
-            document.getElementById('status').innerText = "解析完成！";
-            Array.from(uniqueBlocks).sort().forEach(name => {
-                const div = document.createElement('div');
-                div.className = 'block-item';
-                div.innerText = name;
-                resultsDiv.appendChild(div);
+
+            dataArray.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'row';
+                
+                // 圖示來源優化：先找 blocks 目錄，失敗再找 items 目錄
+                const blockIconUrl = `https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/1.19.2/blocks/${item.name}.png`;
+                const itemIconUrl = `https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/1.19.2/items/${item.name}.png`;
+
+                row.innerHTML = `
+                    <div class="col-item">
+                        <img src="${blockIconUrl}" class="block-icon" 
+                             onerror="this.onerror=null; this.src='${itemIconUrl}'; this.oncallback=function(){this.style.display='none'};">
+                        ${formatItemName(item.name)}
+                    </div>
+                    <div class="col-total">${item.count.toLocaleString()}</div>
+                    <div class="col-stacks">${formatStacks(item.count)}</div>
+                    <div class="col-shulkers">${formatShulkers(item.count)}</div>
+                `;
+                resultsDiv.appendChild(row);
             });
+        }
+
+        function formatItemName(name) {
+            return name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        }
+
+        function formatStacks(count) {
+            const stacks = Math.floor(count / 64);
+            const remainder = count % 64;
+            if (stacks === 0) return `${remainder}`;
+            return `<span class="highlight">${stacks}</span> <span class="dim">stacks</span> ${remainder > 0 ? `<span class="dim">+ ${remainder}</span>` : ''}`;
+        }
+
+        function formatShulkers(count) {
+            const boxes = Math.floor(count / 1728); // 64 * 27
+            const remainder = count % 1728;
+            const stacks = Math.floor(remainder / 64);
+            const extra = remainder % 64;
+            
+            if (boxes === 0) return '-';
+            
+            let html = `<span class="box-pill">${boxes} Box${boxes > 1 ? 'es' : ''}</span>`;
+            if (stacks > 0 || extra > 0) {
+                html += ` <span class="dim">+</span> <span class="highlight">${stacks}</span> <span class="dim">stk</span>`;
+                if (extra > 0) html += ` <span class="dim">+ ${extra}</span>`;
+            }
+            return html;
         }
     </script>
 </body>
